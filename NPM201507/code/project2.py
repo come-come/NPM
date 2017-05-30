@@ -230,8 +230,155 @@ def clique2(filename, threshold):
     windowGraph[49] = nx.Graph()
     cliqueGraph[49] = nx.DiGraph()
     data = pd.read_csv(filename, index_col = 0, sep = '\t' )
-    df = data[data.columns[0]].sort_values(ascending = False)      # 默认是最小在前 若要降序 ascending = False  
+    #df = data[data.columns[0]].sort_values(ascending = False)      # 默认是最小在前 若要降序 ascending = False  
+    df = data[data.columns[0]].sort_values(ascending = False)
     t=1
+
+    term = 183
+    dic_term = {}
+    #dic_cliques  = {}
+
+    for i in range(0, df.shape[0]):
+
+        if df[i] == t :
+            node_1, node_2 = df.index[i].split('_')
+            windowGraph[49].add_edge(node_1, node_2)
+        else :
+            # find cliques when threshold = t 
+            #print i
+            #print 'number_of_cliques(windowGraph):',nx.graph_number_of_cliques(windowGraph[49])
+            for cliques in sorted(list(nx.find_cliques(windowGraph[49])), key=lambda x:len(x)) : #cliques sorted by size of each clique
+                
+                gene_set = set()
+                term_set = set()
+                if sorted(cliques) not in dic_term.values() : #[1,2,3]=[1,2,3]  [2,1,3]!=[1,2,3]
+                    #this clique is new then a term is generated for this clique                     
+                    cliqueGraph[49].add_node(term, annotation = cliques, windowsize = [49])# generate a term                    
+                    # find child
+                    #print 'cliques size:' , len(cliques)
+                    for key,value in sorted(dic_term.items(), key=lambda d:d[0], reverse = True): # sorted by term id 854,853,852,851...
+                        if set(value).issubset(cliques) :  
+                            old_size = len(gene_set)    #old size
+                            gene_set |= set(value)  #add term genes
+                            if len(gene_set) > old_size :    #new size > old size
+                                term_set.add(key)   # add useful term
+                            if len(set(cliques).intersection(gene_set)) ==len(cliques) :   #gene_set == cliques
+                                #print term, 'all link to terms',gene_set.difference(cliques)
+                                for child in term_set :
+                                    cliqueGraph[49].add_edge(term, child)
+                                    #print term, child
+                                break
+                        else:
+                            continue
+                    if gene_set.issubset(cliques) and len(gene_set)<len(cliques):
+                        #print len(gene_set), len(cliques)
+                        #link to term
+                        for child_term in term_set :
+                            #print 'some', term, child_term
+                            cliqueGraph[49].add_edge(term, child_term)
+                        # link to gene     
+                        #print term,'some link to genes'
+                        for child_gene in set(cliques)-gene_set:
+                            #print term, child_gene
+                            cliqueGraph[49].add_edge(term, child_gene)
+                    dic_term[term] = sorted(cliques)
+                    term = term +1                                       
+                else :
+                    continue
+            t = df[i]
+            if not t==-1:
+                node_1, node_2 = df.index[i].split('_')
+                windowGraph[49].add_edge(node_1, node_2)
+            
+            print 'dic_term',len(dic_term)
+            print 'windowGraph[49].size()',windowGraph[49].size(), windowGraph[49].number_of_nodes()            
+            print 'cliqueGraph[49].size()',cliqueGraph[49].size(), cliqueGraph[49].number_of_nodes()            
+    print 'term:',term
+    print 'Before '
+    print 'windowGraph[49].size()',windowGraph[49].size(), windowGraph[49].number_of_nodes()
+    print 'cliqueGraph[49].size()',cliqueGraph[49].size(), cliqueGraph[49].number_of_nodes() 
+    #find terms not root but do not have a parent
+    print 'find terms which is not root but do not have a parent:'
+    degree_0_terms = []
+    for i in cliqueGraph[49].nodes():
+        if cliqueGraph[49].in_degree(i)==0:
+            degree_0_terms.append(i)
+    print 'degree 0 terms: ',degree_0_terms
+    # link these terms to a sutible parent
+    for term_id in sorted(degree_0_terms) : #从小到大 从当前向后查找
+        for fp  in range(term_id+1, term ):
+            if set(dic_term[term_id]).issubset(dic_term[fp]):
+                cliqueGraph[49].add_edge(fp, term_id)
+                break         
+
+    #output files
+    fw = open ('49ontology_edges_v3.txt', 'w')
+    fw2 = open('49ontology_term_annotation_v3.txt', 'w')
+    fw3 = open('49ontology_term_annotation_v3a.txt', 'w')
+    fw.write('parent' +'\t' +'child' +'\n')
+    fw2.write('TermId' +'\t' + ' GeneSize'+ '\t' +'Gene'+'\n')
+    fw3.write('TermId' +'\t' + ' GeneSize'+ '\t' +'Gene'+'\n')
+    for i in sorted(cliqueGraph[49].edges(), key=lambda d:d[0]) :
+        fw.write(str(i[0]) + '\t' + str(i[1]) +'\n')
+    for i in dic_term :
+        fw2.write(str(i) +'\t'+ str(len(dic_term[i])) + '\t' + ','.join(dic_term[i])+ '\n')
+    # input the annotation of each term by nodes attribute---annotation
+    for i in sorted(cliqueGraph[49].nodes()):
+        try :
+            fw3.write(str(i) + '\t'+ str(len(cliqueGraph[49].node[i]['annotation'])) + '\t'+ ' '.join(cliqueGraph[49].node[i]['annotation']) +'\n')
+        except :
+            continue
+    fw.close()
+    fw2.close()
+    fw3.close()
+
+    print 'After:'
+    print 'windowGraph[49].size()',windowGraph[49].size(), windowGraph[49].number_of_nodes()
+    print 'cliqueGraph[49].size()',cliqueGraph[49].size(), cliqueGraph[49].number_of_nodes() 
+    print 'nx.graph_clique_number(windowGraph[49]):',nx.graph_clique_number(windowGraph[49])
+    print 'number_of_cliques(windowGraph):',nx.graph_number_of_cliques(windowGraph[49])
+    
+    
+    
+def clique2_original(filename, threshold):
+    #自底向上
+    '''
+    data = pd.read_csv(filename, index_col = 0, sep = '\t' )
+    windowGraph = {}    # generate window graph
+    cliqueGraph = {}    # generate term
+    
+    for i in range(0, data.shape[1]):
+        # Declare windowGraph and cliqueGraph for each column(window)
+        windowGraph[i] = nx.Graph()
+        cliqueGraph[i] = nx.Graph()
+        term = 1
+        lastIndex = []
+        while threshold >=0:
+            df = data[data[data.columns[i]]>=threshold][data.columns[i]]
+            newIndex = df.index.difference(lastIndex)
+            
+            #Update windowGraph
+            for edge in range(0, len(newIndex)):
+                node_1, node_2 = newIndex[edge].split('_')
+                windowGraph[i].add_edge(node_1, node_2)
+            #Update cliqueGraph
+            for cliques in sorted(list(nx.find_cliques(windowGraph[i]))) :
+                for node in cliques :
+                    cliqueGraph[i].add_edge(term, node)
+                term = term +1
+            lastIndex = df.index
+            threshold = threshold-0.2
+        print 'window', i, windowGraph[i].size(), windowGraph[i].number_of_nodes()   
+     '''   
+    windowGraph = {}
+    cliqueGraph = {}
+    windowGraph[49] = nx.Graph()
+    cliqueGraph[49] = nx.DiGraph()
+    data = pd.read_csv(filename, index_col = 0, sep = '\t' )
+    #df = data[data.columns[0]].sort_values(ascending = False)      # 默认是最小在前 若要降序 ascending = False  
+    df = data[data.columns[0]].sort_values(ascending = False)
+    t=1
+
     term = 183
     dic_term = {}
     #dic_cliques  = {}
@@ -245,16 +392,16 @@ def clique2(filename, threshold):
             # find cliques when threshold = t 
             print i
             print 'number_of_cliques(windowGraph):',nx.graph_number_of_cliques(windowGraph[49])
-            for cliques in sorted(list(nx.find_cliques(windowGraph[49]))) : 
-                print 'cliques length' , len(cliques)
+            for cliques in sorted(list(nx.find_cliques(windowGraph[49])), key=lambda x:len(x)) : #cliques sorted by size of each clique
+                print 'cliques size:' , len(cliques)
                 gene_set = set()
                 term_set = set()
-                if sorted(cliques) not in dic_term.values() : 
-                    #this clique is new                     
+                if sorted(cliques) not in dic_term.values() : #[1,2,3]=[1,2,3]  [2,1,3]!=[1,2,3]
+                    #this clique is new then a term is generated for this clique                     
                     cliqueGraph[49].add_node(term, annotation = cliques, windowsize = [49])# generate a term                    
                     # find child
                     
-                    for key,value in sorted(dic_term.items(), key=lambda d:d[0], reverse = True):
+                    for key,value in sorted(dic_term.items(), key=lambda d:d[0], reverse = True): # sorted by term id 854,853,852,851...
                         if set(value).issubset(cliques) :  
                             old_size = len(gene_set)    #old size
                             gene_set |= set(value)  #add term genes
@@ -264,7 +411,7 @@ def clique2(filename, threshold):
                                 print term, 'all link to terms',gene_set.difference(cliques)
                                 for child in term_set :
                                     cliqueGraph[49].add_edge(term, child)
-                                    print term, child, len(gene_set), len(cliques)
+                                    print term, child
                                 break
                         else:
                             continue
@@ -289,80 +436,34 @@ def clique2(filename, threshold):
                 windowGraph[49].add_edge(node_1, node_2)
             
             print 'dic_term',len(dic_term)
-            print 'windowGraph[49].size()',windowGraph[49].size(), windowGraph[49].number_of_nodes()
-            
+            print 'windowGraph[49].size()',windowGraph[49].size(), windowGraph[49].number_of_nodes()            
             print 'cliqueGraph[49].size()',cliqueGraph[49].size(), cliqueGraph[49].number_of_nodes()            
-
-    #fw = open ('49ontology_edges.txt', 'w')
-    #for i in sorted(cliqueGraph[49].edges(), key=lambda d:d[0]) :
-        #fw.write(str(i[0]) + '\t' + str(i[1]) +'\n')
-        
-    #fw2 = open('49ontology_term_annotation.txt', 'w')
-    #for i in dic_term :
-        #fw2.write(str(i) +'\t'+ str(len(dic_term[i])) + '\t' + ','.join(dic_term[i])+ '\n')
-    
-    print 'windowGraph[49].size()',windowGraph[49].size(), windowGraph[49].number_of_nodes()
-    print 'cliqueGraph[49].size()',cliqueGraph[49].size(), cliqueGraph[49].number_of_nodes()      
-    print 'nx.graph_clique_number(windowGraph[49]):',nx.graph_clique_number(windowGraph[49])
-    print 'number_of_cliques(windowGraph):',nx.graph_number_of_cliques(windowGraph[49])
-               
     '''
-    data = pd.read_csv(filename, index_col = 0, sep = '\t' )
-    df = data[data[data.columns[5]]>=0.7][data.columns[5]]
-    df2 =data[data[data.columns[5]]>=0.8][data.columns[5]]
-    windowGraph = {}
-    cliqueGraph = {}
-    G = nx.Graph()
-    windowGraph[5] = nx.Graph()
-    lastIndex = []
-    
-       
-    term = 0
-    newIndex = df2.index.difference(lastIndex)
-    print len(lastIndex),len(df2.index),len(newIndex)
-    for edge in range(0, len(newIndex)):
-            # for each edges up the threshold
-        node_1, node_2 = newIndex[edge].split('_')
-        windowGraph[5].add_edge(node_1, node_2)
-        
-
-    for i in sorted(list(nx.find_cliques(windowGraph[5]))) :
-            if len(i)>=2 : 
-                for node in i :
-                    G.add_edge(term, node)
-                term = term +1
-                print i
-                
-                
-    print 'window', 5, windowGraph[5].size(), windowGraph[5].number_of_nodes()   
-    cliques = list(nx.find_cliques(windowGraph[5]))
-    N = max(len(c) for c in cliques)
-    print 'size of max clique:',N
-    for c in sorted(cliques):
-        if len(c) == N :
-                #print c # nodes list
-            cliqueGraph[5] = c     
-    lastIndex = df2.index
-    
-    
-    newIndex = df.index.difference(lastIndex)
-    print len(lastIndex),len(df.index),len(newIndex)
-    for edge in range(0, len(newIndex)):
-            # for each edges up the threshold
-        node_1, node_2 = newIndex[edge].split('_')
-        windowGraph[5].add_edge(node_1, node_2)
-        G.add_edge(term, node_1)
-        G.add_edge(term, node_2)
-        term+=1
-    print 'window', 5, windowGraph[5].size(), windowGraph[5].number_of_nodes()   
-    cliques = list(nx.find_cliques(windowGraph[5]))
-    N = max(len(c) for c in cliques)
-    print 'size of max clique:',N
-    for c in sorted(cliques):
-        if len(c) == N :
-                #print c # nodes list
-            cliqueGraph[5] = c
-    '''             
+    #output files
+    fw = open ('49ontology_edges_v2.txt', 'w')
+    fw2 = open('49ontology_term_annotation_v2.txt', 'w')
+    fw3 = open('49ontology_term_annotation_v2a.txt', 'w')
+    fw.write('parent' +'\t' +'child' +'\n')
+    fw2.write('TermId' +'\t' + ' GeneSize'+ '\t' +'Gene'+'\n')
+    fw3.write('TermId' +'\t' + ' GeneSize'+ '\t' +'Gene'+'\n')
+    for i in sorted(cliqueGraph[49].edges(), key=lambda d:d[0]) :
+        fw.write(str(i[0]) + '\t' + str(i[1]) +'\n')
+    for i in dic_term :
+        fw2.write(str(i) +'\t'+ str(len(dic_term[i])) + '\t' + ','.join(dic_term[i])+ '\n')
+    # input the annotation of each term by nodes attribute---annotation
+    for i in sorted(cliqueGraph[49].nodes()):
+        try :
+            fw3.write(str(i) + '\t'+ str(len(cliqueGraph[49].node[i]['annotation'])) + '\t'+ ' '.join(cliqueGraph[49].node[i]['annotation']) +'\n')
+        except :
+            continue
+    fw.close()
+    fw2.close()
+    fw3.close()
+    '''
+    print 'windowGraph[49].size()',windowGraph[49].size(), windowGraph[49].number_of_nodes()
+    print 'cliqueGraph[49].size()',cliqueGraph[49].size(), cliqueGraph[49].number_of_nodes() 
+    print 'nx.graph_clique_number(windowGraph[49]):',nx.graph_clique_number(windowGraph[49])
+    print 'number_of_cliques(windowGraph):',nx.graph_number_of_cliques(windowGraph[49])                          
     
 if __name__ == '__main__':   
     start = time.clock()
